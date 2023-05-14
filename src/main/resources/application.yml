@@ -3,3 +3,12 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
     password: Wzh123.
+
+server:
+  port: 8080
+  shutdown: graceful
+
+# 指定actuator端口和地址
+management:
+  server:
+    port: 9000
