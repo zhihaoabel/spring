@@ -5,10 +5,10 @@ spring:
     password: Wzh123.
 
 server:
-  port: 8080
+  port: 8081
   shutdown: graceful
 
 # 指定actuator端口和地址
 management:
   server:
-    port: 9000
+    port: 9001
