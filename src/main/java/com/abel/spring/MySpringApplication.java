@@ -11,7 +11,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @EnableAsync
 public class MySpringApplication {
     public static void main ( String[] args ) {
-        SpringApplication.run(MySpringApplication.class, args);
+        SpringApplication.run ( MySpringApplication.class, args );
     }
 
     @Bean("threadPoolTaskExecutor")

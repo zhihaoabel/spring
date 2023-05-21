@@ -13,6 +13,7 @@ import org.springframework.context.annotation.DependsOn;
 public class RestTemplateConfiguration {
 
     @Bean
+
     public CustomRestTemplateCustomizer customRestTemplateCustomizer () {
         return new CustomRestTemplateCustomizer ();
     }

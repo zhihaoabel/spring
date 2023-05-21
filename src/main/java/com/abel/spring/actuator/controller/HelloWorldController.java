@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author Abel
  * @since 5/12/2023 11:59 PM
  */
+//@Component( "helloWorldController" )
 @Controller
 public class HelloWorldController {
     private static final String STRING_TEMPLATE = "Hello, %s!";

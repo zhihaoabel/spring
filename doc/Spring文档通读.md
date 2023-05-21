@@ -42,7 +42,7 @@ Spring把构成application基础以及由IoC容器管理的对象叫做bean。�
 
 **IoC容器抽象**
 
-![image-20230514213339804](assets/image-20230514213339804.png)
+![image-20230514213339804](./assets/image-20230514213339804.png)
 
 ##### 配置元数据
 
@@ -265,9 +265,17 @@ public class SimpleMovieLister {
 - `ApplicationContext`创建，并根据配置元数据（XML，Java代码，注解）完成初始化。
 - 对于每个Bean，它的依赖可能包含属性字段，构造方法参数，工厂方法参数。当Bean创建时，容器会提供这些依赖。
 - 每个属性字段，构造方法参数可能是定义好的要设置的值，也可能是对容器中另一个Bean的引用（reference）。
-- 每个属性字段，构造方法参数的值可以从原本提供的格式转换成实际类型的参数值。Spring默认可以将以字符串格式提供的值转换成Java所有内置数据类型的的值，如`int`，`long`，`String`，`boolean`等。
+-
+每个属性字段，构造方法参数的值可以从原本提供的格式转换成实际类型的参数值。Spring默认可以将以字符串格式提供的值转换成Java所有内置数据类型的的值，如`int`，`long`，`String`，`boolean`
+等。
 
-IoC容器在创建是就会校验每个Bean的配置。但是赋值是在创建该Bean时发生的
+IoC容器在创建时就会校验每个Bean的配置。但是赋值是在创建该Bean时发生的。
+
+Bean的创建过程如下：
+
+实例化===》依赖注入===》生命周期方法回调===》初始化完成
+
+创建Bean的入口方法: `preInstantiateSingletons()`
 
 ###### 循环依赖
 
@@ -275,6 +283,166 @@ IoC容器在创建是就会校验每个Bean的配置。但是赋值是在创建�
 
 场景：类A构造器注入需要类B，类B构造器注入需要类A。IoC容器会抛`BeanCurrentlyInCreationException`异常。
 
-官方提供的一个解决方案是将其中的一些类改成set方法注入
+官方提供的一个解决方案是将其中的一些类改成set方法注入。
 
 ---
+
+##### 4.2 依赖和配置细节
+
+###### 内部Bean
+
+```xml
+
+<bean id="outer" class="...">
+    <!-- instead of using a reference to a target bean, simply define the target bean inline -->
+    <property name="target">
+        <!-- 内部bean -->
+        <bean class="com.example.Person"> <!-- this is the inner bean -->
+            <property name="name" value="Fiona Apple"/>
+            <property name="age" value="25"/>
+        </bean>
+    </property>
+</bean>
+```
+
+- 不支持标识符，如`id`和`name`
+- 不支持单独获取内部Bean
+- 不支持注入到别的Bean
+- 通常情况下，共享父bean的生命周期
+
+##### 4.3 depends-on的使用
+
+```xml
+
+<bean id="beanOne" class="ExampleBean" depends-on="manager"/>
+<bean id="manager" class="ManagerBean"/>
+```
+
+等同于注解`@DependsOn`。效果是在当前Bean创建前先创建被依赖的Bean，销毁时也先销毁被依赖的Bean
+
+##### 4.4 Bean的懒加载
+
+默认情况下，`ApplicationContext`的实现会加载所有单例Bean，这样做的好处是及早发现配置错误。如果一个不是懒加载的Bean依赖了懒加载的Bean，容器初始化时还是会加载这个懒加载的Bean。
+
+相关注解`@Lazy`
+
+##### 4.5 Autowiring 依赖
+
+处理`@Autowired`注入逻辑的类是`AutowiredAnnotationBeanPostProcessor`（AABPP），这意味着不能在AABPP里再使用`@Autowired`。
+
+---
+
+**`@Autowired`结合集合实现策略模式**
+
+```java
+@Autowired
+// key是bean名字，value是接口实现类
+Map<String, PayService> payServiceMap;
+```
+
+---
+
+缺陷：
+
+1. 构造器参数总是覆盖autowiring。无法注入原始类型
+2. 从Spring容器生成文档的工具获取不到注入信息
+3. 通过类型自动装配，如果匹配到多个Bean，会报错
+
+解决办法：
+
+- 不用`@Autowired`
+- 使用`@Bean`时可以通过`autowireCandidate`设置注入时是否匹配这个Bean，只对按类型匹配有效，如果按name注入还是会匹配
+- 使用`@Primary`
+- 通过其他注解实现更细粒度的控制
+
+##### 4.6 方法注入
+
+使用场景：
+
+单例Bean A在进行属性填充时需要注入非单例Bean B，由于A是单例，创建完成之后不会改变，此时被注入的B也变成了单例。
+
+解决方案：
+
+1. A实现`ApplicationContextAware`，通过`applicationContext.getBean(String beanName)`，让容器每次创建B。
+
+   缺点：业务代码与Spring框架耦合。
+
+   ```java
+   @Component
+   @Slf4j
+   @Getter
+   @Setter
+   public class TestApplicationContextAware implements ApplicationContextAware {
+   
+       private ApplicationContext applicationContext;
+   
+       @Override
+       public void setApplicationContext ( @NotNull ApplicationContext applicationContext ) throws BeansException {
+           this.applicationContext = applicationContext;
+       }
+   
+       @PostConstruct
+       public void test () {
+           doSomething ();
+       }
+   
+       public A getPrototypeBean () {
+           return applicationContext.getBean ( "a", A.class );
+       }
+   
+       public void doSomething () {
+           log.info ( "prototypeBean1.hashCode (): {}", getPrototypeBean ().hashCode () );
+           log.info ( "prototypeBean2.hashCode (): {}", getPrototypeBean ().hashCode () );
+       }
+   }
+   ```
+
+
+2. Lookup 方法注入。Spring通过CGLIB动态生成字节码，这个字节码会生成A的子类重写Lookup方法
+
+   ---
+
+   **Note**
+
+    - A和Lookup方法不能被final修饰；
+    - 单元测试的时候需要自己手动生成子类并实现`abstract`方法
+    - Lookup方法不能是工厂方法，也不能是configuration类里被`@Bean`修饰的方法
+
+#### 5. Bean Scope
+
+#### 6. Customizing the Name of a Bean
+
+#### 7. Bean Definition Inheritance
+
+Bean Definition（BD） 包含了很多配置信息，包括构造器参数，属性值，容器信息（初始化方法，静态工厂方法名）等。子BD会继承父BD的配置信息，而且子DB可以覆盖或增加信息。
+
+SpringApplication的上下文环境顶层接口是`ApplicationContext`，默认加载所有单例Bean。子BD相关的类是`ChildBeanDefinition`
+。读取xml的上下文环境相关的类是`ClassPathXmlApplicationContext`。
+
+完全由子BD决定的配置有：**依赖，autowire方式，依赖检查，单例，懒加载**。
+
+![image-20230521001605240](./assets/image-20230521001605240.png)
+
+`preInstantiateSingletons()`方法创建Bean时会忽略标记为`abstract`的BD
+
+```xml
+
+<bean id="inheritedTestBean" abstract="true"
+      class="org.springframework.beans.TestBean">
+    <property name="name" value="parent"/>
+    <property name="age" value="1"/>
+</bean>
+
+<bean id="inheritsWithDifferentClass"
+      class="org.springframework.beans.DerivedTestBean"
+      parent="inheritedTestBean" init-method="initialize">
+<property name="name" value="override"/>
+<!-- the age property value of 1 will be inherited from parent -->
+</bean>
+```
+
+#### 8. 容器拓展接入点
+
+#### 9. 基于注解的容器配置
+
+ 
